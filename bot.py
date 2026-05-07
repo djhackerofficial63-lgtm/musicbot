@@ -16,14 +16,14 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.message.text.strip()
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
     await update.message.reply_text("🔍 Qidirmoqda...")
-    try:
-        cmd = [
+    try:cmd = [
             "yt-dlp",
             f"ytsearch1:{q}",
             "-x", "--audio-format", "mp3",
             "--audio-quality", "96K",
             "-o", "/tmp/%(title)s.%(ext)s",
             "--print", "after_move:filepath"
+        
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
         filepath = result.stdout.strip().split("\n")[-1]
