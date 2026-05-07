@@ -3,12 +3,12 @@ import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ChatAction
-import anthropic
+from groq import Groq
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
-PROMPT = 'Return ONLY JSON: {"summary":"uzbek","results":[{"title":"","artist":"","spotify":"https://open.spotify.com/search/TITLE","youtube":"https://www.youtube.com/results?search_query=TITLE"}],"reels":[{"title":"","artist":"","trend":"uzbek","youtube":""}]}'
+PROMPT = 'Return ONLY JSON: {"summary":"uzbek","results":[{"title":"","artist":"","spotify":"https://open.spotify.com/search/TITLE","youtube":"https://www.youtube.com/results?search_query=TITLE+ARTIST"}],"reels":[{"title":"","artist":"","trend":"uzbek","youtube":""}]}'
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🎵 MusicBot!\n\nQo'shiq yoki qo'shiqchi nomini yozing!")
@@ -17,13 +17,13 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.message.text.strip()
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
     try:
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1000,
-            messages=[{"role": "user", "content": PROMPT + "\nSearch: " + q}]
+        client = Groq(api_key=GROQ_API_KEY)
+        response = client.chat.completions.create(
+            model="llama3-8b-8192",
+            messages=[{"role": "user", "content": PROMPT + "\nSearch: " + q}],
+            max_tokens=1000
         )
-        raw = msg.content[0].text.strip()
+        raw = response.choices[0].message.content.strip()
         try:
             data = json.loads(raw)
             text = data.get("summary", "") + "\n\n"
@@ -55,4 +55,4 @@ def main():
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
-    main() 
+    main()
