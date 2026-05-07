@@ -1,9 +1,6 @@
-import os
-import json
 import requests
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from telegram.constants import ChatAction
 
 TELEGRAM_TOKEN = "8594771866:AAFoFLkM3Mk533L1MuY_0wnFGkSY51GsAL0"
 
@@ -23,12 +20,10 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         title = track["title"]
         artist = track["artist"]["name"]
         preview = track["preview"]
-        cover = track["album"]["cover_medium"]
         if not preview:
             await update.message.reply_text("❌ Preview yo'q.")
             return
         audio = requests.get(preview).content
-        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_AUDIO)
         await update.message.reply_audio(
             audio=audio,
             title=title,
