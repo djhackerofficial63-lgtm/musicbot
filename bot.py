@@ -1,14 +1,16 @@
 import requests
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultAudio
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, InlineQueryHandler, filters, ContextTypes
 
 TELEGRAM_TOKEN = "8594771866:AAFoFLkM3Mk533L1MuY_0wnFGkSY51GsAL0"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    bot_username = (await context.bot.get_me()).username
     await update.message.reply_text(
         "🎵 *MusicBot ga xush kelibsiz!*\n\n"
-        "Qo'shiq yoki qo'shiqchi nomini yozing!\n\n"
-        "Misol: Ummon, Shahlo Ahmedova, Drake",
+        "Qo'shiq nomini yozing — preview tinglaymiz!\n\n"
+        "📱 *To'liq qo'shiq uchun:*\n"
+        f"Istalgan chatda `@{bot_username} qo'shiq nomi` yozing!",
         parse_mode="Markdown"
     )
 
@@ -19,7 +21,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         r = requests.get(f"https://api.deezer.com/search?q={q}&limit=10", timeout=10)
         data = r.json()
         if not data.get("data"):
-            await update.message.reply_text("❌ Topilmadi. Boshqacha yozing.")
+            await update.message.reply_text("❌ Topilmadi.")
             return
         buttons = []
         for i, track in enumerate(data["data"]):
@@ -35,7 +37,7 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )])
         kb = InlineKeyboardMarkup(buttons)
         await update.message.reply_text(
-            f"🎵 *'{q}'* bo'yicha natijalar:\n\nQo'shiqni tanlang 👇",
+            f"🎵 *'{q}'* natijalari:\n\nQo'shiqni tanlang 👇",
             reply_markup=kb,
             parse_mode="Markdown"
         )
@@ -59,7 +61,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         mins = duration // 60
         secs = duration % 60
         if not preview:
-            await msg.edit_text("❌ Bu qo'shiq uchun preview yo'q.")
+            await msg.edit_text("❌ Preview yo'q.")
             return
         audio_data = requests.get(preview, timeout=30).content
         await msg.delete()
@@ -83,11 +85,35 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await msg.edit_text("❌ Xato: " + str(e)[:200])
 
+async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.inline_query.query
+    if not q or len(q) < 2:
+        return
+    try:
+        r = requests.get(f"https://api.deezer.com/search?q={q}&limit=10", timeout=10)
+        data = r.json()
+        results = []
+        for track in data.get("data", []):
+            if not track.get("preview"):
+                continue
+            results.append(InlineQueryResultAudio(
+                id=str(track["id"]),
+                audio_url=track["preview"],
+                title=track["title"],
+                performer=track["artist"]["name"],
+                audio_duration=30,
+                caption=f"🎵 {track['title']} - {track['artist']['name']}\n💿 {track['album']['title']}"
+            ))
+        await update.inline_query.answer(results, cache_time=300)
+    except Exception:
+        pass
+
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search))
     app.add_handler(CallbackQueryHandler(button))
+    app.add_handler(InlineQueryHandler(inline_query))
     print("Bot started!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
