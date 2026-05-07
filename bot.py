@@ -1,39 +1,35 @@
 import os
-import json
 import subprocess
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ChatAction
-from groq import Groq
 
 TELEGRAM_TOKEN = "8594771866:AAFoFLkM3Mk533L1MuY_0wnFGkSY51GsAL0"
-GROQ_API_KEY = "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"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🎵 MusicBot!\n\nQo'shiq nomini yozing — men yuklab yuboraman!")
+    await update.message.reply_text("🎵 MusicBot!\n\nQo'shiq nomini yozing!")
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.message.text.strip()
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
     await update.message.reply_text("🔍 Qidirmoqda...")
-    try:cmd = [
+    try:
+        subprocess.run([
             "yt-dlp",
-            f"ytsearch1:{q}",
-            "-x", "--audio-format", "mp3",
-            "--audio-quality", "96K",
-            "-o", "/tmp/%(title)s.%(ext)s",
-            "--print", "after_move:filepath"
-        
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        filepath = result.stdout.strip().split("\n")[-1]
-        if filepath and os.path.exists(filepath):
+            "--no-check-certificates",
+            "--extract-audio",
+            "--audio-format", "mp3",
+            "--audio-quality", "5",
+            "-o", "/tmp/audio.mp3",
+            f"ytsearch1:{q}"
+        ], timeout=120, check=True)
+        filepath = "/tmp/audio.mp3"
+        if os.path.exists(filepath):
             await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_AUDIO)
             with open(filepath, "rb") as f:
                 await update.message.reply_audio(audio=f, title=q)
             os.remove(filepath)
         else:
-            await update.message.reply_text("❌ Qo'shiq topilmadi. Boshqacha yozing.")
+            await update.message.reply_text("❌ Topilmadi. Boshqacha yozing.")
     except Exception as e:
         await update.message.reply_text("❌ Xato: " + str(e)[:200])
 
