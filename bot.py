@@ -6,8 +6,7 @@ from telegram.constants import ChatAction
 from groq import Groq
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-
+GROQ_API_KEY = "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"
 PROMPT = 'Return ONLY JSON: {"summary":"uzbek","results":[{"title":"","artist":"","spotify":"https://open.spotify.com/search/TITLE","youtube":"https://www.youtube.com/results?search_query=TITLE+ARTIST"}],"reels":[{"title":"","artist":"","trend":"uzbek","youtube":""}]}'
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
