@@ -13,21 +13,24 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.message.text.strip()
     await update.message.reply_text("🔍 Qidirmoqda...")
     try:
-        subprocess.run([
+        os.makedirs("/tmp/music", exist_ok=True)
+        result = subprocess.run([
             "yt-dlp",
             "--no-check-certificates",
-            "--extract-audio",
-            "--audio-format", "mp3",
-            "--audio-quality", "5",
-            "-o", "/tmp/audio.mp3",
+            "-f", "bestaudio/best",
+            "-o", "/tmp/music/audio.%(ext)s",
+            "--no-playlist",
             f"ytsearch1:{q}"
-        ], timeout=120, check=True)
-        filepath = "/tmp/audio.mp3"
-        if os.path.exists(filepath):
+        ], timeout=120, capture_output=True, text=True)
+        found = None
+        for f in os.listdir("/tmp/music"):
+            found = f"/tmp/music/{f}"
+            break
+        if found and os.path.exists(found):
             await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_AUDIO)
-            with open(filepath, "rb") as f:
+            with open(found, "rb") as f:
                 await update.message.reply_audio(audio=f, title=q)
-            os.remove(filepath)
+            os.remove(found)
         else:
             await update.message.reply_text("❌ Topilmadi. Boshqacha yozing.")
     except Exception as e:
