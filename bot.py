@@ -1,52 +1,42 @@
 import os
-import os
 import json
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+import requests
+from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.constants import ChatAction
-from groq import Groq
 
 TELEGRAM_TOKEN = "8594771866:AAFoFLkM3Mk533L1MuY_0wnFGkSY51GsAL0"
-GROQ_API_KEY = "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"
-
-PROMPT = 'Return ONLY JSON: {"summary":"uzbek","results":[{"title":"","artist":"","spotify":"https://open.spotify.com/search/TITLE","youtube":"https://www.youtube.com/results?search_query=TITLE+ARTIST"}],"reels":[{"title":"","artist":"","trend":"uzbek","youtube":""}]}'
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🎵 MusicBot!\n\nQo'shiq yoki qo'shiqchi nomini yozing!")
+    await update.message.reply_text("🎵 MusicBot!\n\nQo'shiq nomini yozing — 30 soniya preview yuboraman!")
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.message.text.strip()
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+    await update.message.reply_text("🔍 Qidirmoqda...")
     try:
-        client = Groq(api_key=GROQ_API_KEY)
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": PROMPT + "\nSearch: " + q}],
-            max_tokens=1000
+        r = requests.get(f"https://api.deezer.com/search?q={q}&limit=1")
+        data = r.json()
+        if not data.get("data"):
+            await update.message.reply_text("❌ Topilmadi. Boshqacha yozing.")
+            return
+        track = data["data"][0]
+        title = track["title"]
+        artist = track["artist"]["name"]
+        preview = track["preview"]
+        cover = track["album"]["cover_medium"]
+        if not preview:
+            await update.message.reply_text("❌ Preview yo'q.")
+            return
+        audio = requests.get(preview).content
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_AUDIO)
+        await update.message.reply_audio(
+            audio=audio,
+            title=title,
+            performer=artist,
+            caption=f"🎵 {title} - {artist}\n⏱ 30 soniya preview"
         )
-        raw = response.choices[0].message.content.strip()
-        try:
-            data = json.loads(raw)
-            text = data.get("summary", "") + "\n\n"
-            for i, s in enumerate(data.get("results", [])[:5], 1):
-                text += f"{i}. {s.get('title','')} - {s.get('artist','')}\n"
-            for i, r in enumerate(data.get("reels", [])[:3], 1):
-                text += f"\n📱 {r.get('title','')} - {r.get('artist','')}\n{r.get('trend','')}\n"
-            btns = []
-            first = data.get("results", [{}])[0] if data.get("results") else {}
-            row = []
-            if first.get("spotify"):
-                row.append(InlineKeyboardButton("🟢 Spotify", url=first["spotify"]))
-            if first.get("youtube"):
-                row.append(InlineKeyboardButton("🔴 YouTube", url=first["youtube"]))
-            if row:
-                btns.append(row)
-            kb = InlineKeyboardMarkup(btns) if btns else None
-            await update.message.reply_text(text or "Topilmadi", reply_markup=kb, disable_web_page_preview=True)
-        except:
-            await update.message.reply_text(raw[:3000])
     except Exception as e:
-        await update.message.reply_text("Xato: " + str(e)[:200])
+        await update.message.reply_text("❌ Xato: " + str(e)[:200])
 
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
