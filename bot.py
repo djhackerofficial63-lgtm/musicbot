@@ -1,120 +1,113 @@
-import requests
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultAudio
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, InlineQueryHandler, filters, ContextTypes
+import logging
+import anthropic
+import os
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler,
+    CallbackQueryHandler, ContextTypes, filters,
+)
 
-TELEGRAM_TOKEN = "8594771866:AAFoFLkM3Mk533L1MuY_0wnFGkSY51GsAL0"
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+TELEGRAM_TOKEN = "8625557628:AAGcsOoVZS3SBpCpdvdVq0SZC1igHWGpWQY"
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+user_mode = {}
+
+SYSTEM_PROMPTS = {
+    "slayd": "Siz talabalar uchun professional prezentatsiya yaratib beradigan yordamchisiz. Foydalanuvchi mavzu beradi, siz esa har bir slayd uchun sarlavha va 4-5 ta asosiy nuqta bilan batafsil prezentatsiya tarkibini o'zbek tilida tayyorlaysiz.",
+    "kurs_ishi": "Siz talabalar uchun kurs ishi yozib beradigan akademik yordamchisiz. Kirish, nazariy asoslar, tahlil, xulosa va adabiyotlar ro'yxati bilan to'liq kurs ishi yozasiz. O'zbek tilida, ilmiy uslubda.",
+    "maqola": "Siz ilmiy maqolalar yozib beradigan yordamchisiz. Annotatsiya, kalit so'zlar, kirish, asosiy qism, xulosa va adabiyotlar bilan to'liq maqola yozasiz. O'zbek tilida.",
+    "referat": "Siz talabalar uchun referat tayyorlab beradigan yordamchisiz. Kirish, asosiy qism (3-4 bo'lim), xulosa va adabiyotlar bilan to'liq referat yozasiz. O'zbek tilida.",
+    "esse": "Siz esse yozib beradigan yordamchisiz. Erkin, ijodiy, asosli esse yozasiz. 500-800 so'z. O'zbek tilida.",
+    "test": "Siz test savollari tuzib beradigan yordamchisiz. A,B,C,D variantli testlar tuzasiz, to'g'ri javobni oxirida ko'rsatasiz.",
+    "tarjima": "Siz professional tarjimon yordamchisiz. Berilgan matnni so'ralgan tilga aniq tarjima qilasiz.",
+    "umumiy": "Siz o'zbek tilida gaplashadigan, talabalarga yordam beradigan universal AI yordamchisiz.",
+}
+
+VAZIFA_NOMI = {
+    "slayd": "📊 Slayd tayyorlash", "kurs_ishi": "📝 Kurs ishi",
+    "maqola": "📄 Maqola", "referat": "📚 Referat",
+    "esse": "✍️ Esse", "test": "🧪 Test",
+    "tarjima": "🌐 Tarjima", "umumiy": "💬 Erkin suhbat",
+}
+
+VAZIFA_SAVOL = {
+    "slayd": "📊 Qaysi mavzu bo'yicha prezentatsiya tayyorlay?",
+    "kurs_ishi": "📝 Qaysi mavzu bo'yicha kurs ishi yozay?",
+    "maqola": "📄 Qaysi mavzu bo'yicha maqola yozay?",
+    "referat": "📚 Qaysi mavzu bo'yicha referat tayyorlay?",
+    "esse": "✍️ Qaysi mavzu bo'yicha esse yozay?",
+    "test": "🧪 Mavzu va nechta test kerakligini yozing. Masalan: Fotosintez, 20 ta test",
+    "tarjima": "🌐 Matn va qaysi tilga tarjima kerakligini yozing.",
+    "umumiy": "💬 Savolingizni yozing!",
+}
+
+def main_menu():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📊 Slayd", callback_data="slayd"), InlineKeyboardButton("📝 Kurs ishi", callback_data="kurs_ishi")],
+        [InlineKeyboardButton("📄 Maqola", callback_data="maqola"), InlineKeyboardButton("📚 Referat", callback_data="referat")],
+        [InlineKeyboardButton("✍️ Esse", callback_data="esse"), InlineKeyboardButton("🧪 Test", callback_data="test")],
+        [InlineKeyboardButton("🌐 Tarjima", callback_data="tarjima"), InlineKeyboardButton("💬 Erkin suhbat", callback_data="umumiy")],
+    ])
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    bot_username = (await context.bot.get_me()).username
     await update.message.reply_text(
-        "🎵 *MusicBot ga xush kelibsiz!*\n\n"
-        "Qo'shiq nomini yozing — preview tinglaymiz!\n\n"
-        "📱 *To'liq qo'shiq uchun:*\n"
-        f"Istalgan chatda `@{bot_username} qo'shiq nomi` yozing!",
-        parse_mode="Markdown"
+        f"👋 Salom *{update.effective_user.first_name}*!\n\n🎓 Men *Akadem Yordamchi* — talabalarga mo'ljallangan AI yordamchiman!\n\nVazifani tanlang 👇",
+        parse_mode="Markdown", reply_markup=main_menu()
     )
 
-async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.message.text.strip()
-    await update.message.reply_text("🔍 Qidirmoqda...")
-    try:
-        r = requests.get(f"https://api.deezer.com/search?q={q}&limit=10", timeout=10)
-        data = r.json()
-        if not data.get("data"):
-            await update.message.reply_text("❌ Topilmadi.")
-            return
-        buttons = []
-        for i, track in enumerate(data["data"]):
-            title = track["title"]
-            artist = track["artist"]["name"]
-            duration = track["duration"]
-            mins = duration // 60
-            secs = duration % 60
-            track_id = track["id"]
-            buttons.append([InlineKeyboardButton(
-                f"{i+1}. {title} - {artist} [{mins}:{secs:02d}]",
-                callback_data=f"t_{track_id}"
-            )])
-        kb = InlineKeyboardMarkup(buttons)
-        await update.message.reply_text(
-            f"🎵 *'{q}'* natijalari:\n\nQo'shiqni tanlang 👇",
-            reply_markup=kb,
-            parse_mode="Markdown"
-        )
-    except Exception as e:
-        await update.message.reply_text("❌ Xato: " + str(e)[:200])
-
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    track_id = query.data.replace("t_", "")
-    msg = await query.message.reply_text("⏳ Yuklanmoqda...")
-    try:
-        r = requests.get(f"https://api.deezer.com/track/{track_id}", timeout=10)
-        track = r.json()
-        title = track["title"]
-        artist = track["artist"]["name"]
-        album = track["album"]["title"]
-        cover = track["album"]["cover_xl"]
-        preview = track["preview"]
-        duration = track.get("duration", 0)
-        mins = duration // 60
-        secs = duration % 60
-        if not preview:
-            await msg.edit_text("❌ Preview yo'q.")
-            return
-        audio_data = requests.get(preview, timeout=30).content
-        await msg.delete()
-        await query.message.reply_photo(
-            photo=cover,
-            caption=(
-                f"🎵 *{title}*\n"
-                f"👤 {artist}\n"
-                f"💿 {album}\n"
-                f"⏱ {mins}:{secs:02d}\n\n"
-                f"_30 soniya preview_"
-            ),
-            parse_mode="Markdown"
-        )
-        await query.message.reply_audio(
-            audio=audio_data,
-            title=title,
-            performer=artist,
-            duration=30
-        )
-    except Exception as e:
-        await msg.edit_text("❌ Xato: " + str(e)[:200])
-
-async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    q = update.inline_query.query
-    if not q or len(q) < 2:
+    if query.data == "menu":
+        user_mode.pop(query.from_user.id, None)
+        await query.edit_message_text("🏠 Asosiy menyu 👇", reply_markup=main_menu())
         return
+    user_mode[query.from_user.id] = query.data
+    await query.edit_message_text(
+        VAZIFA_SAVOL.get(query.data, "Mavzuni yozing:"),
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Menyu", callback_data="menu")]])
+    )
+
+async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    mode = user_mode.get(user_id, "umumiy")
+    thinking = await update.message.reply_text(f"⏳ {VAZIFA_NOMI.get(mode)} bajarilmoqda...")
     try:
-        r = requests.get(f"https://api.deezer.com/search?q={q}&limit=10", timeout=10)
-        data = r.json()
-        results = []
-        for track in data.get("data", []):
-            if not track.get("preview"):
-                continue
-            results.append(InlineQueryResultAudio(
-                id=str(track["id"]),
-                audio_url=track["preview"],
-                title=track["title"],
-                performer=track["artist"]["name"],
-                audio_duration=30,
-                caption=f"🎵 {track['title']} - {track['artist']['name']}\n💿 {track['album']['title']}"
-            ))
-        await update.inline_query.answer(results, cache_time=300)
-    except Exception:
-        pass
+        response = client.messages.create(
+            model="claude-opus-4-5", max_tokens=4000,
+            system=SYSTEM_PROMPTS.get(mode), messages=[{"role": "user", "content": update.message.text}]
+        )
+        await thinking.delete()
+        text = response.content[0].text
+        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Yana", callback_data=mode), InlineKeyboardButton("🏠 Menyu", callback_data="menu")]])
+        for i in range(0, len(text), 4000):
+            chunk = text[i:i+4000]
+            if i + 4000 >= len(text):
+                await update.message.reply_text(chunk, reply_markup=kb)
+            else:
+                await update.message.reply_text(chunk)
+    except Exception as e:
+        logger.error(e)
+        await thinking.edit_text("❌ Xatolik! /start bosing.")
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("📌 /start — Botni ishga tushirish\n📌 /menu — Asosiy menyu", reply_markup=main_menu())
+
+async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_mode.pop(update.effective_user.id, None)
+    await update.message.reply_text("🏠 Asosiy menyu 👇", reply_markup=main_menu())
 
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, search))
-    app.add_handler(CallbackQueryHandler(button))
-    app.add_handler(InlineQueryHandler(inline_query))
-    print("Bot started!")
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("menu", menu_command))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    logger.info("Bot ishga tushdi!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
